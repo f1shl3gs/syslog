@@ -42,3 +42,4 @@ pub use severity::Severity;
 
 pub use message::Message;
 pub use parser::parse_message;
+pub use procid::ProcId;

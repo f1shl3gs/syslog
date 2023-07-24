@@ -323,7 +323,7 @@ fn parse_term(m: &str, min_length: usize, max_length: usize) -> ParseResult<(Opt
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use syslog::parse_message;
 ///
 /// let message = parse_message("<78>1 2016-01-15T00:04:01+00:00 host1 CROND 10391 - [meta sequenceId=\"29\"] some_message").unwrap();
@@ -373,15 +373,41 @@ pub fn parse_message(input: &str) -> ParseResult<Message<&str>> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone};
     use std::mem;
 
-    use super::{parse_message, ParseErr};
+    use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone};
 
+    use super::{parse_message, ParseErr, StructuredElement};
     use crate::facility::Facility;
     use crate::parser::parse_timestamp;
     use crate::procid::ProcId;
     use crate::severity::Severity;
+
+    #[test]
+    fn rfc5424_examples() {
+        // https://datatracker.ietf.org/doc/html/rfc5424#section-6.5
+        for input in [
+            r##"<34>1 2003-10-11T22:14:15.003Z mymachine.example.com su - ID47 - BOM'su root' failed for lonvick on /dev/pts/8"##,
+            r##"<165>1 2003-08-24T05:14:15.000003-07:00 192.0.2.1 myproc 8710 - - %% It's time to make the do-nuts."##,
+            r##"<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"] BOMAn application event log entry..."##,
+            r##"<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"][examplePriority@32473 class="high"]"##,
+        ] {
+            let _msg = parse_message(input).unwrap();
+        }
+    }
+
+    // #[test]
+    // fn rfc3164_examples() {
+    //     // https://datatracker.ietf.org/doc/html/rfc3164#section-5.4
+    //     for input in [
+    //         r##"<34>Oct 11 22:14:15 mymachine su: 'su root' failed for lonvick on /dev/pts/8"##,
+    //         r##"<13>Feb  5 17:32:18 10.0.0.99 Use the BFG!"##,
+    //         r##"<165>Aug 24 05:34:00 CST 1987 mymachine myproc[10]: %% It's time to make the do-nuts.  %%  Ingredients: Mix=OK, Jelly=OK # Devices: Mixer=OK, Jelly_Injector=OK, Frier=OK # Transport: Conveyer1=OK, Conveyer2=OK # %%"##,
+    //         r##"<0>1990 Oct 22 10:52:01 TZ-6 scapegoat.dmz.example.org 10.1.2.3 sched[0]: That's All Folks!"##,
+    //     ] {
+    //         let _msg = parse_message(input).unwrap();
+    //     }
+    // }
 
     #[test]
     fn test_simple() {
@@ -589,52 +615,56 @@ mod tests {
         assert!(msg.is_err(), "expected parse fail");
     }
 
-    // #[test]
-    // fn test_empty_sd_value() {
-    //     let msg = parse_message(r#"<29>1 2018-05-14T08:23:01.520Z leyal_test4 mgd 13894 UI_CHILD_EXITED [junos@2636.1.1.1.2.57 pid="14374" return-value="5" core-dump-status="" command="/usr/sbin/mustd"]"#).expect("must parse");
-    //     assert_eq!(msg.facility, Facility::DAEMON);
-    //     assert_eq!(msg.severity, Severity::NOTICE);
-    //     assert_eq!(msg.hostname, Some("leyal_test4"));
-    //     assert_eq!(msg.appname, Some("mgd"));
-    //     assert_eq!(msg.procid, Some(ProcId::PID(13894)));
-    //     assert_eq!(msg.msg, String::from(""));
-    //     assert_eq!(
-    //         msg.timestamp,
-    //         Some(DateTime::parse_from_rfc3339("2018-05-14T08:23:01.520Z").unwrap())
-    //     );
-    //     assert_eq!(msg.structured_data.len(), 1);
-    //     let sd = msg
-    //         .structured_data
-    //         .find_sdid("junos@2636.1.1.1.2.57")
-    //         .expect("should contain root SD");
-    //     let expected = {
-    //         let mut expected = BTreeMap::new();
-    //         expected.insert("pid", "14374");
-    //         expected.insert("return-value", "5");
-    //         expected.insert("core-dump-status", "");
-    //         expected.insert("command", "/usr/sbin/mustd");
-    //         expected
-    //             .into_iter()
-    //             .map(|(k, v)| (k.to_string(), v.to_string()))
-    //             .collect::<BTreeMap<_, _>>()
-    //     };
-    //     assert_eq!(sd, &expected);
-    // }
+    #[test]
+    fn test_empty_sd_value() {
+        let msg = parse_message(r#"<29>1 2018-05-14T08:23:01.520Z leyal_test4 mgd 13894 UI_CHILD_EXITED [junos@2636.1.1.1.2.57 pid="14374" return-value="5" core-dump-status="" command="/usr/sbin/mustd"]"#).expect("must parse");
+        assert_eq!(msg.facility, Facility::DAEMON);
+        assert_eq!(msg.severity, Severity::NOTICE);
+        assert_eq!(msg.hostname, Some("leyal_test4"));
+        assert_eq!(msg.appname, Some("mgd"));
+        assert_eq!(msg.procid, Some(ProcId::PID(13894)));
+        assert_eq!(msg.msg, String::from(""));
+        assert_eq!(
+            msg.timestamp,
+            Some(DateTime::parse_from_rfc3339("2018-05-14T08:23:01.520Z").unwrap())
+        );
+        assert_eq!(msg.structured_data.len(), 1);
 
-    // #[test]
-    // fn test_fields_start_with_dash() {
-    //     let msg = parse_message("<39>1 2018-05-15T20:56:58+00:00 -web1west -201805020050-bc5d6a47c3-master - - [meta sequenceId=\"28485532\"] 25450-uWSGI worker 6: getaddrinfo*.gaih_getanswer: got type \"DNAME\"").expect("should parse");
-    //     assert_eq!(msg.hostname, Some("-web1west"));
-    //     assert_eq!(msg.appname, Some("-201805020050-bc5d6a47c3-master"));
-    //     assert_eq!(
-    //         msg.structured_data.find_tuple("meta", "sequenceId"),
-    //         Some(&"28485532".to_string())
-    //     );
-    //     assert_eq!(
-    //         msg.msg,
-    //         "25450-uWSGI worker 6: getaddrinfo*.gaih_getanswer: got type \"DNAME\"".to_string()
-    //     );
-    // }
+        let want = StructuredElement {
+            id: "junos@2636.1.1.1.2.57",
+            params: vec![
+                ("pid", "14374"),
+                ("return-value", "5"),
+                ("core-dump-status", ""),
+                ("command", "/usr/sbin/mustd")
+            ]
+        };
+        let got = msg.structured_data
+            .first()
+            .unwrap();
+        assert_eq!(got, &want);
+    }
+
+    #[test]
+    fn test_fields_start_with_dash() {
+        let msg = parse_message("<39>1 2018-05-15T20:56:58+00:00 -web1west -201805020050-bc5d6a47c3-master - - [meta sequenceId=\"28485532\"] 25450-uWSGI worker 6: getaddrinfo*.gaih_getanswer: got type \"DNAME\"").expect("should parse");
+        assert_eq!(msg.hostname, Some("-web1west"));
+        assert_eq!(msg.appname, Some("-201805020050-bc5d6a47c3-master"));
+        let (key, value) = msg
+            .structured_data
+            .iter()
+            .find(|element| element.id == "meta")
+            .unwrap()
+            .params
+            .first()
+            .unwrap();
+        assert_eq!(*key, "sequenceId");
+        assert_eq!(*value, "28485532");
+        assert_eq!(
+            msg.msg,
+            "25450-uWSGI worker 6: getaddrinfo*.gaih_getanswer: got type \"DNAME\""
+        );
+    }
 
     #[test]
     fn test_truncated() {

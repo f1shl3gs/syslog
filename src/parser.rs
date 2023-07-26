@@ -326,7 +326,8 @@ fn parse_term(m: &str, min_length: usize, max_length: usize) -> ParseResult<(Opt
 /// ```no_run
 /// use syslog::parse_message;
 ///
-/// let message = parse_message("<78>1 2016-01-15T00:04:01+00:00 host1 CROND 10391 - [meta sequenceId=\"29\"] some_message").unwrap();
+/// let log = "<78>1 2016-01-15T00:04:01+00:00 host1 CROND 10391 - [meta sequenceId=\"29\"] some_message";
+/// let message = parse_message(log).unwrap();
 ///
 /// assert!(message.hostname.unwrap() == "host1");
 /// ```

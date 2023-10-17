@@ -30,6 +30,8 @@
 //!    message. Rust doesn't have a convenient way to only treat *some* of a buffer as utf-8,
 //!    so I'm just not supporting that. Most "real" syslog servers barf on it anway.
 //!
+
+mod error;
 mod facility;
 pub mod message;
 pub mod parser;
@@ -37,9 +39,10 @@ mod procid;
 mod severity;
 mod structured_data;
 
+pub use error::Error;
 pub use facility::Facility;
-pub use severity::Severity;
-
 pub use message::Message;
 pub use parser::parse_message;
 pub use procid::ProcId;
+pub use severity::Severity;
+pub use structured_data::StructuredElement;

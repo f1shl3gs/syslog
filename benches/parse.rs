@@ -25,7 +25,7 @@ fn bench_parse(c: &mut Criterion) {
     for (name, input) in inputs {
         group.bench_with_input(BenchmarkId::new("syslog_loose", name), input, |b, input| {
             b.iter(|| {
-                syslog_loose::parse_message(input);
+                syslog_loose::parse_message(input, syslog_loose::Variant::RFC5424);
             });
         });
 

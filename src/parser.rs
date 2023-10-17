@@ -1,15 +1,8 @@
-use std::num;
-use std::str;
-use std::str::FromStr;
+use std::str::{from_utf8, FromStr};
 
 use chrono::{DateTime, FixedOffset, LocalResult, NaiveDate, TimeZone};
-use thiserror::Error;
 
-use crate::facility;
-use crate::message::Message;
-use crate::procid::ProcId;
-use crate::severity;
-use crate::structured_data::StructuredElement;
+use super::{Error, Facility, Message, ProcId, Severity, StructuredElement};
 
 // We parse with this super-duper-dinky hand-coded recursive descent parser because we don't really
 // have much other choice:
@@ -45,43 +38,11 @@ macro_rules! take_char {
     ($e: expr, $c:expr) => {{
         $e = match $e.chars().next() {
             Some($c) => &$e[1..],
-            Some(_) => {
-                return Err(ParseErr::ExpectedTokenErr($c));
-            }
-            None => {
-                return Err(ParseErr::UnexpectedEndOfInput);
-            }
+            Some(_) => return Err(Error::ExpectedChar($c)),
+            None => return Err(Error::UnexpectedEndOfInput),
         }
     }};
 }
-
-#[derive(Debug, Error)]
-pub enum ParseErr {
-    #[error("bad severity in message")]
-    BadSeverityInPri,
-    #[error("bad facility in message")]
-    BadFacilityInPri,
-    #[error("unexpected eof")]
-    UnexpectedEndOfInput,
-    #[error("too few digits in numeric field")]
-    TooFewDigits,
-    #[error("too many digits in numeric field")]
-    TooManyDigits,
-    #[error("invalid UTC offset")]
-    InvalidUTCOffset,
-    #[error("unicode error: {0}")]
-    BaseUnicodeError(#[from] str::Utf8Error),
-    #[error("unicode error: {0}")]
-    UnicodeError(#[from] std::string::FromUtf8Error),
-    #[error("unexpected input at character {0}")]
-    ExpectedTokenErr(char),
-    #[error("integer conversion error: {0}")]
-    IntConversionErr(#[from] num::ParseIntError),
-    #[error("date had invalid UTC offset")]
-    InvalidOffset,
-}
-
-type ParseResult<T> = Result<T, ParseErr>;
 
 fn take_while<F>(input: &str, f: F, max_chars: usize) -> (&str, Option<&str>)
 where
@@ -98,19 +59,17 @@ where
     ("", None)
 }
 
-fn parse_sd_id(input: &str) -> ParseResult<(&str, &str)> {
+fn parse_sd_id(input: &str) -> Result<(&str, &str), Error> {
     let (res, rest) = take_while(input, |c| c != ' ' && c != '=' && c != ']', 128);
-    Ok((
-        res,
-        match rest {
-            Some(s) => s,
-            None => return Err(ParseErr::UnexpectedEndOfInput),
-        },
-    ))
+    if let Some(rest) = rest {
+        Ok((res, rest))
+    } else {
+        Err(Error::UnexpectedEndOfInput)
+    }
 }
 
 /** Parse a `param_value`... a.k.a. a quoted string */
-fn parse_param_value(input: &str) -> ParseResult<(&str, &str)> {
+fn parse_param_value(input: &str) -> Result<(&str, &str), Error> {
     let mut rest = input;
     take_char!(rest, '"');
 
@@ -131,10 +90,10 @@ fn parse_param_value(input: &str) -> ParseResult<(&str, &str)> {
         }
     }
 
-    Err(ParseErr::UnexpectedEndOfInput)
+    Err(Error::UnexpectedEndOfInput)
 }
 
-fn parse_sd_params(input: &str) -> ParseResult<(Vec<(&str, &str)>, &str)> {
+fn parse_sd_params(input: &str) -> Result<(Vec<(&str, &str)>, &str), Error> {
     let mut params = Vec::new();
     let mut top = input;
     loop {
@@ -152,7 +111,7 @@ fn parse_sd_params(input: &str) -> ParseResult<(Vec<(&str, &str)>, &str)> {
     }
 }
 
-fn parse_sde(sde: &str) -> ParseResult<((&str, Vec<(&str, &str)>), &str)> {
+fn parse_sde(sde: &str) -> Result<((&str, Vec<(&str, &str)>), &str), Error> {
     let mut rest = sde;
     take_char!(rest, '[');
     let id = take_item!(parse_sd_id(rest), rest);
@@ -161,7 +120,7 @@ fn parse_sde(sde: &str) -> ParseResult<((&str, Vec<(&str, &str)>), &str)> {
     Ok(((id, params), rest))
 }
 
-fn parse_structured_data(input: &str) -> ParseResult<(Vec<StructuredElement<&str>>, &str)> {
+fn parse_structured_data(input: &str) -> Result<(Vec<StructuredElement<&str>>, &str), Error> {
     let mut sd = vec![];
 
     if let Some(rest) = input.strip_prefix('-') {
@@ -180,46 +139,30 @@ fn parse_structured_data(input: &str) -> ParseResult<(Vec<StructuredElement<&str
     Ok((sd, rest))
 }
 
-fn parse_pri_val(pri: i32) -> ParseResult<(severity::Severity, facility::Facility)> {
-    let sev = severity::Severity::from_int(pri & 0x7).ok_or(ParseErr::BadSeverityInPri)?;
-    let fac = facility::Facility::from_int(pri >> 3).ok_or(ParseErr::BadFacilityInPri)?;
+fn parse_pri_val(pri: i32) -> Result<(Severity, Facility), Error> {
+    let sev = Severity::from_int(pri & 0x7).ok_or(Error::BadSeverityInPri)?;
+    let fac = Facility::from_int(pri >> 3).ok_or(Error::BadFacilityInPri)?;
     Ok((sev, fac))
 }
 
 /// Parse an i32
-fn parse_num(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32, &str)> {
-    let (res, rest1) = take_while(s, |c| ('0'..='9').contains(&c), max_digits);
-    let rest = rest1.ok_or(ParseErr::UnexpectedEndOfInput)?;
-    if res.len() < min_digits {
-        Err(ParseErr::TooFewDigits)
-    } else if res.len() > max_digits {
-        Err(ParseErr::TooManyDigits)
-    } else {
-        Ok((
-            i32::from_str(res).map_err(ParseErr::IntConversionErr)?,
-            rest,
-        ))
-    }
-}
-
-/// Parse an i32
-fn parse_num_generic<NT>(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(NT, &str)>
+fn parse_num<T>(s: &str, min_digits: usize, max_digits: usize) -> Result<(T, &str), Error>
 where
-    NT: FromStr<Err = num::ParseIntError>,
+    T: FromStr<Err = std::num::ParseIntError>,
 {
     let (res, rest1) = take_while(s, |c| ('0'..='9').contains(&c), max_digits);
-    let rest = rest1.ok_or(ParseErr::UnexpectedEndOfInput)?;
+    let rest = rest1.ok_or(Error::UnexpectedEndOfInput)?;
     if res.len() < min_digits {
-        Err(ParseErr::TooFewDigits)
+        Err(Error::TooFewDigits)
     } else if res.len() > max_digits {
-        Err(ParseErr::TooManyDigits)
+        Err(Error::TooManyDigits)
     } else {
-        Ok((NT::from_str(res).map_err(ParseErr::IntConversionErr)?, rest))
+        Ok((T::from_str(res)?, rest))
     }
 }
 
-fn parse_decimal(d: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32, &str)> {
-    parse_num(d, min_digits, max_digits).map(|(val, s)| {
+fn parse_decimal(d: &str, min_digits: usize, max_digits: usize) -> Result<(i32, &str), Error> {
+    parse_num::<i32>(d, min_digits, max_digits).map(|(val, s)| {
         let mut multiplicand = 1;
         let z = 10 - (d.len() - s.len());
 
@@ -230,7 +173,7 @@ fn parse_decimal(d: &str, min_digits: usize, max_digits: usize) -> ParseResult<(
     })
 }
 
-fn parse_timestamp(m: &str) -> ParseResult<(Option<DateTime<FixedOffset>>, &str)> {
+fn parse_timestamp(m: &str) -> Result<(Option<DateTime<FixedOffset>>, &str), Error> {
     let mut rest = m;
     if let Some(rest) = rest.strip_prefix('-') {
         return Ok((None, rest));
@@ -238,16 +181,16 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<DateTime<FixedOffset>>, &str)
 
     let year = take_item!(parse_num(rest, 4, 4), rest);
     take_char!(rest, '-');
-    let month = take_item!(parse_num_generic(rest, 2, 2), rest);
+    let month = take_item!(parse_num(rest, 2, 2), rest);
     take_char!(rest, '-');
-    let day = take_item!(parse_num_generic(rest, 2, 2), rest);
+    let day = take_item!(parse_num(rest, 2, 2), rest);
 
     take_char!(rest, 'T');
-    let hour = take_item!(parse_num_generic(rest, 2, 2), rest);
+    let hour = take_item!(parse_num(rest, 2, 2), rest);
     take_char!(rest, ':');
-    let minute = take_item!(parse_num_generic(rest, 2, 2), rest);
+    let minute = take_item!(parse_num(rest, 2, 2), rest);
     take_char!(rest, ':');
-    let second = take_item!(parse_num_generic(rest, 2, 2), rest);
+    let second = take_item!(parse_num(rest, 2, 2), rest);
     let nano = if rest.starts_with('.') {
         take_char!(rest, '.');
         take_item!(parse_decimal(rest, 1, 6), rest) as u32
@@ -267,17 +210,17 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<DateTime<FixedOffset>>, &str)
                 '-' => (-1, &rest[1..]),
                 '+' => (1, &rest[1..]),
                 _ => {
-                    return Err(ParseErr::InvalidUTCOffset);
+                    return Err(Error::InvalidUTCOffset);
                 }
             };
-            let hours = i32::from_str(&irest[0..2]).map_err(ParseErr::IntConversionErr)?;
-            let minutes = i32::from_str(&irest[3..5]).map_err(ParseErr::IntConversionErr)?;
+            let hours = i32::from_str(&irest[0..2])?;
+            let minutes = i32::from_str(&irest[3..5])?;
             rest = &irest[5..];
             sign * (hours * 60 * 60 + minutes * 60)
         }
     };
 
-    let offset = FixedOffset::east_opt(offset).ok_or(ParseErr::InvalidOffset)?;
+    let offset = FixedOffset::east_opt(offset).ok_or(Error::InvalidOffset)?;
     let datetime = NaiveDate::from_ymd_opt(year, month, day)
         .unwrap()
         .and_hms_nano_opt(hour, minute, second, nano)
@@ -286,11 +229,15 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<DateTime<FixedOffset>>, &str)
     if let LocalResult::Single(ts) = offset.from_local_datetime(&datetime) {
         Ok((Some(ts), rest))
     } else {
-        Err(ParseErr::InvalidOffset)
+        Err(Error::InvalidOffset)
     }
 }
 
-fn parse_term(m: &str, min_length: usize, max_length: usize) -> ParseResult<(Option<&str>, &str)> {
+fn parse_term(
+    m: &str,
+    min_length: usize,
+    max_length: usize,
+) -> Result<(Option<&str>, &str), Error> {
     if m.starts_with('-') && (m.len() <= 1 || m.as_bytes()[1] == 0x20) {
         return Ok((None, &m[1..]));
     }
@@ -298,17 +245,18 @@ fn parse_term(m: &str, min_length: usize, max_length: usize) -> ParseResult<(Opt
     for (idx, chr) in byte_ary.iter().enumerate() {
         if *chr < 33 || *chr > 126 {
             if idx < min_length {
-                return Err(ParseErr::TooFewDigits);
+                return Err(Error::TooFewDigits);
             }
-            let utf8_ary = str::from_utf8(&byte_ary[..idx]).map_err(ParseErr::BaseUnicodeError)?;
+            let utf8_ary = from_utf8(&byte_ary[..idx])?;
             return Ok((Some(utf8_ary), &m[idx..]));
         }
         if idx >= max_length {
-            let utf8_ary = str::from_utf8(&byte_ary[..idx]).map_err(ParseErr::BaseUnicodeError)?;
+            let utf8_ary = from_utf8(&byte_ary[..idx])?;
             return Ok((Some(utf8_ary), &m[idx..]));
         }
     }
-    Err(ParseErr::UnexpectedEndOfInput)
+
+    Err(Error::UnexpectedEndOfInput)
 }
 
 /// Parse a string into a `Message` object
@@ -326,12 +274,11 @@ fn parse_term(m: &str, min_length: usize, max_length: usize) -> ParseResult<(Opt
 /// ```no_run
 /// use syslog::parse_message;
 ///
-/// let log = "<78>1 2016-01-15T00:04:01+00:00 host1 CROND 10391 - [meta sequenceId=\"29\"] some_message";
-/// let message = parse_message(log).unwrap();
+/// let message = parse_message("<78>1 2016-01-15T00:04:01+00:00 host1 CROND 10391 - [meta sequenceId=\"29\"] some_message").unwrap();
 ///
 /// assert!(message.hostname.unwrap() == "host1");
 /// ```
-pub fn parse_message(input: &str) -> ParseResult<Message<&str>> {
+pub fn parse_message(input: &str) -> Result<Message<&str>, Error> {
     let mut rest = input;
     take_char!(rest, '<');
     let prival = take_item!(parse_num(rest, 1, 3), rest);
@@ -378,11 +325,7 @@ mod tests {
 
     use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone};
 
-    use super::{parse_message, ParseErr, StructuredElement};
-    use crate::facility::Facility;
-    use crate::parser::parse_timestamp;
-    use crate::procid::ProcId;
-    use crate::severity::Severity;
+    use super::*;
 
     #[test]
     fn rfc5424_examples() {
@@ -637,12 +580,10 @@ mod tests {
                 ("pid", "14374"),
                 ("return-value", "5"),
                 ("core-dump-status", ""),
-                ("command", "/usr/sbin/mustd")
-            ]
+                ("command", "/usr/sbin/mustd"),
+            ],
         };
-        let got = msg.structured_data
-            .first()
-            .unwrap();
+        let got = msg.structured_data.first().unwrap();
         assert_eq!(got, &want);
     }
 
@@ -673,7 +614,7 @@ mod tests {
             parse_message("<39>1 2018-05-15T20:56:58+00:00 -web1west -").expect_err("should fail");
         assert_eq!(
             mem::discriminant(&err),
-            mem::discriminant(&ParseErr::UnexpectedEndOfInput)
+            mem::discriminant(&Error::UnexpectedEndOfInput)
         );
     }
 

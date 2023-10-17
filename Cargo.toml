@@ -13,4 +13,3 @@ syslog_loose = { version = "0.19", default-features = false }
 
 [dependencies]
 chrono = { version = "0.4", default-features = false }
-thiserror = { version = "1.0", default-features = false }

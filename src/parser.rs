@@ -1,4 +1,4 @@
-use std::str::{from_utf8, FromStr};
+use std::str::{FromStr};
 
 use chrono::{DateTime, FixedOffset, LocalResult, NaiveDate, TimeZone};
 
@@ -17,15 +17,6 @@ use super::{Error, Facility, Message, ProcId, Severity, StructuredElement};
 // General convention is that the parse state is represented by a string slice named "rest"; the
 // macros will update that slice as they consume tokens.
 
-macro_rules! maybe_expect_char {
-    ($s:expr, $e: expr) => {
-        match $s.chars().next() {
-            Some($e) => Some(&$s[1..]),
-            _ => None,
-        }
-    };
-}
-
 macro_rules! take_item {
     ($e:expr, $r:expr) => {{
         let (t, r) = $e?;
@@ -36,11 +27,13 @@ macro_rules! take_item {
 
 macro_rules! take_char {
     ($e: expr, $c:expr) => {{
-        $e = match $e.chars().next() {
-            Some($c) => &$e[1..],
-            Some(_) => return Err(Error::ExpectedChar($c)),
-            None => return Err(Error::UnexpectedEndOfInput),
-        }
+        $e = if $e.starts_with($c) {
+            &$e[1..]
+        } else if $e.is_empty() {
+            return Err(Error::UnexpectedEndOfInput);
+        } else {
+            return Err(Error::ExpectedChar($c));
+        };
     }};
 }
 
@@ -60,9 +53,9 @@ where
 }
 
 fn parse_sd_id(input: &str) -> Result<(&str, &str), Error> {
-    let (res, rest) = take_while(input, |c| c != ' ' && c != '=' && c != ']', 128);
+    let (got, rest) = take_while(input, |c| c != ' ' && c != '=' && c != ']', 128);
     if let Some(rest) = rest {
-        Ok((res, rest))
+        Ok((got, rest))
     } else {
         Err(Error::UnexpectedEndOfInput)
     }
@@ -97,8 +90,8 @@ fn parse_sd_params(input: &str) -> Result<(Vec<(&str, &str)>, &str), Error> {
     let mut params = Vec::new();
     let mut top = input;
     loop {
-        if let Some(rest2) = maybe_expect_char!(top, ' ') {
-            let mut rest = rest2;
+        if top.starts_with(' ') {
+            let mut rest = &top[1..];
             let name = take_item!(parse_sd_id(rest), rest);
             take_char!(rest, '=');
             let value = take_item!(parse_param_value(rest), rest);
@@ -111,53 +104,55 @@ fn parse_sd_params(input: &str) -> Result<(Vec<(&str, &str)>, &str), Error> {
     }
 }
 
-fn parse_sde(sde: &str) -> Result<((&str, Vec<(&str, &str)>), &str), Error> {
-    let mut rest = sde;
+fn parse_structured_element(input: &str) -> Result<(StructuredElement<&str>, &str), Error> {
+    let mut rest = input;
     take_char!(rest, '[');
     let id = take_item!(parse_sd_id(rest), rest);
     let params = take_item!(parse_sd_params(rest), rest);
     take_char!(rest, ']');
-    Ok(((id, params), rest))
+
+    Ok((StructuredElement { id, params }, rest))
 }
 
 fn parse_structured_data(input: &str) -> Result<(Vec<StructuredElement<&str>>, &str), Error> {
-    let mut sd = vec![];
+    let mut elements = vec![];
 
     if let Some(rest) = input.strip_prefix('-') {
-        return Ok((sd, rest));
+        return Ok((elements, rest));
     }
 
     let mut rest = input;
     while !rest.is_empty() {
-        let (id, params) = take_item!(parse_sde(rest), rest);
-        sd.push(StructuredElement { id, params });
+        let se = take_item!(parse_structured_element(rest), rest);
+        elements.push(se);
+
         if rest.starts_with(' ') {
             break;
         }
     }
 
-    Ok((sd, rest))
+    Ok((elements, rest))
 }
 
 fn parse_pri_val(pri: i32) -> Result<(Severity, Facility), Error> {
-    let sev = Severity::from_int(pri & 0x7).ok_or(Error::BadSeverityInPri)?;
-    let fac = Facility::from_int(pri >> 3).ok_or(Error::BadFacilityInPri)?;
-    Ok((sev, fac))
+    let severity = Severity::try_from(pri & 0x7)?;
+    let facility = Facility::try_from(pri >> 3)?;
+    Ok((severity, facility))
 }
 
-/// Parse an i32
-fn parse_num<T>(s: &str, min_digits: usize, max_digits: usize) -> Result<(T, &str), Error>
+/// Parse an integer
+fn parse_num<T>(input: &str, min_digits: usize, max_digits: usize) -> Result<(T, &str), Error>
 where
     T: FromStr<Err = std::num::ParseIntError>,
 {
-    let (res, rest1) = take_while(s, |c| ('0'..='9').contains(&c), max_digits);
-    let rest = rest1.ok_or(Error::UnexpectedEndOfInput)?;
-    if res.len() < min_digits {
+    let (got, rest) = take_while(input, |c| c.is_ascii_digit(), max_digits);
+    let rest = rest.ok_or(Error::UnexpectedEndOfInput)?;
+    if got.len() < min_digits {
         Err(Error::TooFewDigits)
-    } else if res.len() > max_digits {
+    } else if got.len() > max_digits {
         Err(Error::TooManyDigits)
     } else {
-        Ok((T::from_str(res)?, rest))
+        Ok((T::from_str(got)?, rest))
     }
 }
 
@@ -165,10 +160,10 @@ fn parse_decimal(d: &str, min_digits: usize, max_digits: usize) -> Result<(i32, 
     parse_num::<i32>(d, min_digits, max_digits).map(|(val, s)| {
         let mut multiplicand = 1;
         let z = 10 - (d.len() - s.len());
-
-        for _i in 1..(z) {
+        for _i in 1..z {
             multiplicand *= 10;
         }
+
         (val * multiplicand, s)
     })
 }
@@ -191,11 +186,9 @@ fn parse_timestamp(m: &str) -> Result<(Option<DateTime<FixedOffset>>, &str), Err
     let minute = take_item!(parse_num(rest, 2, 2), rest);
     take_char!(rest, ':');
     let second = take_item!(parse_num(rest, 2, 2), rest);
-    let nano = if rest.starts_with('.') {
-        take_char!(rest, '.');
-        take_item!(parse_decimal(rest, 1, 6), rest) as u32
-    } else {
-        0
+    let nano = match rest.strip_prefix('.') {
+        Some(stripped) => take_item!(parse_decimal(stripped, 1, 6), rest) as u32,
+        None => 0,
     };
 
     let offset = match rest.chars().next() {
@@ -241,18 +234,18 @@ fn parse_term(
     if m.starts_with('-') && (m.len() <= 1 || m.as_bytes()[1] == 0x20) {
         return Ok((None, &m[1..]));
     }
-    let byte_ary = m.as_bytes();
-    for (idx, chr) in byte_ary.iter().enumerate() {
-        if *chr < 33 || *chr > 126 {
+
+    for (idx, ch) in m.char_indices() {
+        if ch < 33 as char || ch > 126 as char {
             if idx < min_length {
                 return Err(Error::TooFewDigits);
             }
-            let utf8_ary = from_utf8(&byte_ary[..idx])?;
-            return Ok((Some(utf8_ary), &m[idx..]));
+
+            return Ok((Some(&m[..idx]), &m[idx..]));
         }
+
         if idx >= max_length {
-            let utf8_ary = from_utf8(&byte_ary[..idx])?;
-            return Ok((Some(utf8_ary), &m[idx..]));
+            return Ok((Some(&m[..idx]), &m[idx..]));
         }
     }
 
@@ -260,14 +253,6 @@ fn parse_term(
 }
 
 /// Parse a string into a `Message` object
-///
-/// # Arguments
-///
-///  * `s`: Anything convertible to a string
-///
-/// # Returns
-///
-///  * `ParseErr` if the string is not parseable as an RFC5424 message
 ///
 /// # Example
 ///
@@ -283,7 +268,7 @@ pub fn parse_message(input: &str) -> Result<Message<&str>, Error> {
     take_char!(rest, '<');
     let prival = take_item!(parse_num(rest, 1, 3), rest);
     take_char!(rest, '>');
-    let (sev, fac) = parse_pri_val(prival)?;
+    let (severity, facility) = parse_pri_val(prival)?;
     let version = take_item!(parse_num(rest, 1, 2), rest);
     take_char!(rest, ' ');
     let timestamp = take_item!(parse_timestamp(rest), rest);
@@ -300,14 +285,15 @@ pub fn parse_message(input: &str) -> Result<Message<&str>, Error> {
     let msgid = take_item!(parse_term(rest, 1, 32), rest);
     take_char!(rest, ' ');
     let structured_data = take_item!(parse_structured_data(rest), rest);
-    let msg = match maybe_expect_char!(rest, ' ') {
-        Some(r) => r,
-        None => rest,
+    let msg = if rest.starts_with(' ') {
+        &rest[1..]
+    } else {
+        rest
     };
 
     Ok(Message {
-        severity: sev,
-        facility: fac,
+        severity,
+        facility,
         version,
         timestamp,
         hostname,
@@ -322,10 +308,25 @@ pub fn parse_message(input: &str) -> Result<Message<&str>, Error> {
 #[cfg(test)]
 mod tests {
     use std::mem;
+    use std::time::Instant;
 
     use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone};
 
     use super::*;
+
+    #[test]
+    fn bench() {
+        let input = r##"<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"] BOMAn application event log entry..."##;
+        let start = Instant::now();
+        let total = 200000;
+        for _i in 0..total {
+            let _msg = parse_message(input).unwrap();
+        }
+        let elapsed = start.elapsed();
+
+        println!("{:?}", elapsed);
+        println!("{} op/s", total as f64 / elapsed.as_secs_f64())
+    }
 
     #[test]
     fn rfc5424_examples() {

@@ -33,8 +33,8 @@
 
 mod error;
 mod facility;
-pub mod message;
-pub mod parser;
+mod message;
+mod parser;
 mod procid;
 mod severity;
 mod structured_data;

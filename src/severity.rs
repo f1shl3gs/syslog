@@ -1,3 +1,5 @@
+use crate::Error;
+
 /// Syslog Severities from RFC 5424.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[allow(non_camel_case_types)]
@@ -12,13 +14,15 @@ pub enum Severity {
     DEBUG = 7,
 }
 
-impl Severity {
-    /// Convert an int (as used in the wire serialization) into a `SyslogSeverity`
-    ///
-    /// Returns an Option, but the wire protocol will only include 0..7, so should
-    /// never return None in practical usage.
-    pub(crate) fn from_int(i: i32) -> Option<Self> {
-        let s = match i {
+/// Convert an int (as used in the wire serialization) into a `SyslogSeverity`
+///
+/// Returns an Option, but the wire protocol will only include 0..7, so should
+/// never return None in practical usage.
+impl TryFrom<i32> for Severity {
+    type Error = Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        let severity = match value {
             0 => Severity::EMERG,
             1 => Severity::ALERT,
             2 => Severity::CRIT,
@@ -27,12 +31,14 @@ impl Severity {
             5 => Severity::NOTICE,
             6 => Severity::INFO,
             7 => Severity::DEBUG,
-            _ => return None,
+            _ => return Err(Error::BadSeverityInPri),
         };
 
-        Some(s)
+        Ok(severity)
     }
+}
 
+impl Severity {
     /// Convert a syslog severity into a unique string representation
     pub fn as_str(self) -> &'static str {
         match self {

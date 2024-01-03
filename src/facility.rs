@@ -1,3 +1,5 @@
+use crate::Error;
+
 /// Syslog facilities. Taken From RFC 5424, but I've heard that some platforms mix these around.
 /// Names are from Linux.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
@@ -29,10 +31,12 @@ pub enum Facility {
     LOCAL7 = 23,
 }
 
-impl Facility {
-    /// Convert an int (as used in the wire serialization) into a `Facility`
-    pub(crate) fn from_int(i: i32) -> Option<Self> {
-        let fac = match i {
+/// Convert an int (as used in the wire serialization) into a `Facility`
+impl TryFrom<i32> for Facility {
+    type Error = Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        let facility = match value {
             0 => Facility::KERN,
             1 => Facility::USER,
             2 => Facility::MAIL,
@@ -57,12 +61,14 @@ impl Facility {
             21 => Facility::LOCAL5,
             22 => Facility::LOCAL6,
             23 => Facility::LOCAL7,
-            _ => return None,
+            _ => return Err(Error::BadFacilityInPri),
         };
 
-        Some(fac)
+        Ok(facility)
     }
+}
 
+impl Facility {
     /// Convert a syslog facility into a unique string representation
     pub fn as_str(self) -> &'static str {
         match self {

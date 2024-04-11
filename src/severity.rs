@@ -59,7 +59,7 @@ mod tests {
     use super::Severity;
 
     #[test]
-    fn test_deref() {
+    fn deref() {
         assert_eq!(Severity::EMERG.as_str(), "emerg");
         assert_eq!(Severity::ALERT.as_str(), "alert");
         assert_eq!(Severity::CRIT.as_str(), "crit");

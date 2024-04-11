@@ -105,7 +105,7 @@ mod tests {
     use super::Facility;
 
     #[test]
-    fn test_deref() {
+    fn deref() {
         assert_eq!(Facility::KERN.as_str(), "kern");
     }
 }

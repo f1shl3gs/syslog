@@ -1,4 +1,4 @@
-use std::str::{FromStr};
+use std::str::FromStr;
 
 use chrono::{DateTime, FixedOffset, LocalResult, NaiveDate, TimeZone};
 
@@ -308,25 +308,10 @@ pub fn parse_message(input: &str) -> Result<Message<&str>, Error> {
 #[cfg(test)]
 mod tests {
     use std::mem;
-    use std::time::Instant;
 
     use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone};
 
     use super::*;
-
-    #[test]
-    fn bench() {
-        let input = r##"<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"] BOMAn application event log entry..."##;
-        let start = Instant::now();
-        let total = 200000;
-        for _i in 0..total {
-            let _msg = parse_message(input).unwrap();
-        }
-        let elapsed = start.elapsed();
-
-        println!("{:?}", elapsed);
-        println!("{} op/s", total as f64 / elapsed.as_secs_f64())
-    }
 
     #[test]
     fn rfc5424_examples() {
@@ -355,7 +340,7 @@ mod tests {
     // }
 
     #[test]
-    fn test_simple() {
+    fn simple() {
         let msg = parse_message("<1>1 - - - - - -").expect("Should parse empty message");
         assert!(msg.facility == Facility::KERN);
         assert!(msg.severity == Severity::ALERT);
@@ -368,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn test_with_time_zulu() {
+    fn with_time_zulu() {
         let msg = parse_message("<1>1 2015-01-01T00:00:00Z host - - - -")
             .expect("Should parse empty message");
         let want = DateTime::parse_from_rfc3339("2015-01-01T00:00:00Z").unwrap();
@@ -376,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn test_with_time_offset() {
+    fn with_time_offset() {
         let msg = parse_message("<1>1 2015-01-01T00:00:00+00:00 - - - - -")
             .expect("Should parse empty message");
         let want = DateTime::parse_from_rfc3339("2015-01-01T00:00:00+00:00").unwrap();
@@ -384,7 +369,7 @@ mod tests {
     }
 
     #[test]
-    fn test_with_time_offset_nonzero() {
+    fn with_time_offset_nonzero() {
         let msg = parse_message("<1>1 2015-01-01T00:00:00-10:00 - - - - -")
             .expect("Should parse empty message");
         let want = DateTime::parse_from_rfc3339("2015-01-01T00:00:00-10:00").unwrap();
@@ -404,7 +389,7 @@ mod tests {
     }
 
     #[test]
-    fn test_complex() {
+    fn complex() {
         let msg = parse_message("<78>1 2016-01-15T00:04:01+00:00 host1 CROND 10391 - [meta sequenceId=\"29\"] some_message").expect("Should parse complex message");
         assert_eq!(msg.facility, Facility::CRON);
         assert_eq!(msg.severity, Severity::INFO);
@@ -434,7 +419,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sd_empty() {
+    fn sd_empty() {
         let msg = parse_message(
             "<78>1 2016-01-15T00:04:01Z host1 CROND 10391 - [meta@1234] some_message",
         )
@@ -462,7 +447,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sd_features() {
+    fn sd_features() {
         let msg = parse_message("<78>1 2016-01-15T00:04:01Z host1 CROND 10391 - [meta sequenceId=\"29\" sequenceBlah=\"foo\"][my key=\"value\"][meta bar=\"baz=\"] some_message").expect("Should parse complex message");
         assert_eq!(msg.facility, Facility::CRON);
         assert_eq!(msg.severity, Severity::INFO);
@@ -488,7 +473,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sd_with_escaped_quote() {
+    fn sd_with_escaped_quote() {
         let msg_text = r#"<1>1 - - - - - [meta key="val\"ue"] message"#;
         let msg = parse_message(msg_text).expect("should parse");
 
@@ -506,26 +491,26 @@ mod tests {
     }
 
     #[test]
-    fn test_other_message() {
+    fn other_message() {
         let msg_text = r#"<190>1 2016-02-21T01:19:11+00:00 batch6sj - - - [meta sequenceId="21881798" x-group="37051387"][origin x-service="tracking"] metascutellar conversationalist nephralgic exogenetic graphy streng outtaken acouasm amateurism prenotice Lyonese bedull antigrammatical diosphenol gastriloquial bayoneteer sweetener naggy roughhouser dighter addend sulphacid uneffectless ferroprussiate reveal Mazdaist plaudite Australasian distributival wiseman rumness Seidel topazine shahdom sinsion mesmerically pinguedinous ophthalmotonometer scuppler wound eciliate expectedly carriwitchet dictatorialism bindweb pyelitic idic atule kokoon poultryproof rusticial seedlip nitrosate splenadenoma holobenthic uneternal Phocaean epigenic doubtlessly indirection torticollar robomb adoptedly outspeak wappenschawing talalgia Goop domitic savola unstrafed carded unmagnified mythologically orchester obliteration imperialine undisobeyed galvanoplastical cycloplegia quinquennia foremean umbonal marcgraviaceous happenstance theoretical necropoles wayworn Igbira pseudoangelic raising unfrounced lamasary centaurial Japanolatry microlepidoptera"#;
         parse_message(msg_text).expect("should parse as text");
     }
 
     #[test]
-    fn test_bad_pri() {
+    fn bad_pri() {
         let msg = parse_message("<4096>1 - - - - - -");
         assert!(msg.is_err());
     }
 
     #[test]
-    fn test_bad_match() {
+    fn bad_match() {
         // we shouldn't be able to parse RFC3164 messages
         let msg = parse_message("<134>Feb 18 20:53:31 haproxy[376]: I am a message");
         assert!(msg.is_err());
     }
 
     #[test]
-    fn test_example_timestamps() {
+    fn example_timestamps() {
         // these are the example timestamps in the rfc
 
         let msg = parse_message("<1>1 1985-04-12T23:20:50.52Z host - - - -")
@@ -561,7 +546,7 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_sd_value() {
+    fn empty_sd_value() {
         let msg = parse_message(r#"<29>1 2018-05-14T08:23:01.520Z leyal_test4 mgd 13894 UI_CHILD_EXITED [junos@2636.1.1.1.2.57 pid="14374" return-value="5" core-dump-status="" command="/usr/sbin/mustd"]"#).expect("must parse");
         assert_eq!(msg.facility, Facility::DAEMON);
         assert_eq!(msg.severity, Severity::NOTICE);
@@ -589,7 +574,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fields_start_with_dash() {
+    fn fields_start_with_dash() {
         let msg = parse_message("<39>1 2018-05-15T20:56:58+00:00 -web1west -201805020050-bc5d6a47c3-master - - [meta sequenceId=\"28485532\"] 25450-uWSGI worker 6: getaddrinfo*.gaih_getanswer: got type \"DNAME\"").expect("should parse");
         assert_eq!(msg.hostname, Some("-web1west"));
         assert_eq!(msg.appname, Some("-201805020050-bc5d6a47c3-master"));
@@ -610,7 +595,7 @@ mod tests {
     }
 
     #[test]
-    fn test_truncated() {
+    fn truncated() {
         let err =
             parse_message("<39>1 2018-05-15T20:56:58+00:00 -web1west -").expect_err("should fail");
         assert_eq!(
@@ -620,7 +605,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_timestamp() {
+    fn timestamp() {
         let (ts, rest) = parse_timestamp("2015-02-18T23:16:09Z").unwrap();
         assert_eq!(rest, "");
         assert_eq!(

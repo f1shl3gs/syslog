@@ -41,23 +41,22 @@ fn take_while<F>(input: &str, f: F, max_chars: usize) -> (&str, Option<&str>)
 where
     F: Fn(char) -> bool,
 {
-    for (idx, chr) in input.char_indices() {
-        if !f(chr) {
-            return (&input[..idx], Some(&input[idx..]));
-        }
-        if idx == max_chars {
-            return (&input[..idx], Some(&input[idx..]));
+    let data = input.as_bytes();
+    for index in 0..data.len() {
+        if !f(data[index] as char) || index == max_chars {
+            return (&input[..index], Some(&input[index..]));
         }
     }
+
     ("", None)
 }
 
 fn parse_sd_id(input: &str) -> Result<(&str, &str), Error> {
     let (got, rest) = take_while(input, |c| c != ' ' && c != '=' && c != ']', 128);
-    if let Some(rest) = rest {
-        Ok((got, rest))
-    } else {
-        Err(Error::UnexpectedEndOfInput)
+
+    match rest {
+        Some(rest) => Ok((got, rest)),
+        None => Err(Error::UnexpectedEndOfInput),
     }
 }
 

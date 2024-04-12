@@ -12,35 +12,36 @@ This implementation is very simple, so it is more efficient.
 
 ```text
 parse/syslog_loose/with_structured_data
-                        time:   [685.84 ns 686.84 ns 687.87 ns]
-Found 2 outliers among 100 measurements (2.00%)
-  1 (1.00%) high mild
-  1 (1.00%) high severe
+                        time:   [660.24 ns 661.48 ns 662.68 ns]
 parse/syslog/with_structured_data
-                        time:   [316.41 ns 317.09 ns 317.70 ns]
+                        time:   [289.91 ns 290.64 ns 291.33 ns]
 parse/syslog_loose/with_structured_data_long_msg
-                        time:   [474.28 ns 475.58 ns 476.99 ns]
+                        time:   [464.72 ns 468.42 ns 473.15 ns]
+Found 9 outliers among 100 measurements (9.00%)
+  4 (4.00%) high mild
+  5 (5.00%) high severe
 parse/syslog/with_structured_data_long_msg
-                        time:   [212.63 ns 212.99 ns 213.38 ns]
-Found 6 outliers among 100 measurements (6.00%)
-  3 (3.00%) low mild
+                        time:   [190.74 ns 191.62 ns 192.54 ns]
+Found 9 outliers among 100 measurements (9.00%)
+  3 (3.00%) high mild
+  6 (6.00%) high severe
+parse/syslog_loose/without_structured_data
+                        time:   [456.49 ns 457.94 ns 459.78 ns]
+Found 4 outliers among 100 measurements (4.00%)
+  4 (4.00%) high severe
+parse/syslog/without_structured_data
+                        time:   [192.59 ns 193.61 ns 194.58 ns]
+Found 3 outliers among 100 measurements (3.00%)
   1 (1.00%) high mild
   2 (2.00%) high severe
-parse/syslog_loose/without_structured_data
-                        time:   [467.73 ns 469.26 ns 470.90 ns]
-parse/syslog/without_structured_data
-                        time:   [214.45 ns 214.69 ns 214.99 ns]
-Found 4 outliers among 100 measurements (4.00%)
-  1 (1.00%) high mild
-  3 (3.00%) high severe
 parse/syslog_loose/without_structured_data_long_msg
-                        time:   [670.14 ns 671.58 ns 673.21 ns]
-Found 10 outliers among 100 measurements (10.00%)
-  6 (6.00%) high mild
-  4 (4.00%) high severe
+                        time:   [664.48 ns 670.22 ns 675.93 ns]
+Found 6 outliers among 100 measurements (6.00%)
+  4 (4.00%) high mild
+  2 (2.00%) high severe
 parse/syslog/without_structured_data_long_msg
-                        time:   [316.62 ns 317.59 ns 318.74 ns]
-Found 2 outliers among 100 measurements (2.00%)
+                        time:   [292.21 ns 292.86 ns 293.53 ns]
+Found 1 outliers among 100 measurements (1.00%)
   1 (1.00%) high mild
-  1 (1.00%) high severe
+
 ```

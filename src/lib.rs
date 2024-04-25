@@ -38,6 +38,7 @@ mod parser;
 mod procid;
 mod severity;
 mod structured_data;
+mod timestamp;
 
 pub use error::Error;
 pub use facility::Facility;
@@ -46,3 +47,5 @@ pub use parser::parse_message;
 pub use procid::ProcId;
 pub use severity::Severity;
 pub use structured_data::StructuredElement;
+
+pub use timestamp::parse_timestamp_rfc3339 as parse_timestamp;

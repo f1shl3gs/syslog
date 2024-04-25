@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
-use chrono::{DateTime, FixedOffset, LocalResult, NaiveDate, TimeZone};
+use chrono::{DateTime, FixedOffset};
 
+use super::timestamp::parse_timestamp_rfc3339;
 use super::{Error, Facility, Message, ProcId, Severity, StructuredElement};
 
 // We parse with this super-duper-dinky hand-coded recursive descent parser because we don't really
@@ -37,6 +38,7 @@ macro_rules! take_char {
     }};
 }
 
+#[inline]
 fn take_while<F>(input: &str, f: F, max_chars: usize) -> (&str, Option<&str>)
 where
     F: Fn(char) -> bool,
@@ -61,6 +63,7 @@ fn parse_sd_id(input: &str) -> Result<(&str, &str), Error> {
 }
 
 /** Parse a `param_value`... a.k.a. a quoted string */
+#[inline]
 fn parse_param_value(input: &str) -> Result<(&str, &str), Error> {
     let mut rest = input;
     take_char!(rest, '"');
@@ -155,73 +158,19 @@ where
     }
 }
 
-fn parse_decimal(d: &str, min_digits: usize, max_digits: usize) -> Result<(i32, &str), Error> {
-    parse_num::<i32>(d, min_digits, max_digits).map(|(val, s)| {
-        let mut multiplicand = 1;
-        let z = 10 - (d.len() - s.len());
-        for _i in 1..z {
-            multiplicand *= 10;
-        }
-
-        (val * multiplicand, s)
-    })
-}
-
 fn parse_timestamp(m: &str) -> Result<(Option<DateTime<FixedOffset>>, &str), Error> {
-    let mut rest = m;
+    let rest = m;
     if let Some(rest) = rest.strip_prefix('-') {
         return Ok((None, rest));
     }
 
-    let year = take_item!(parse_num(rest, 4, 4), rest);
-    take_char!(rest, '-');
-    let month = take_item!(parse_num(rest, 2, 2), rest);
-    take_char!(rest, '-');
-    let day = take_item!(parse_num(rest, 2, 2), rest);
-
-    take_char!(rest, 'T');
-    let hour = take_item!(parse_num(rest, 2, 2), rest);
-    take_char!(rest, ':');
-    let minute = take_item!(parse_num(rest, 2, 2), rest);
-    take_char!(rest, ':');
-    let second = take_item!(parse_num(rest, 2, 2), rest);
-    let nano = match rest.strip_prefix('.') {
-        Some(stripped) => take_item!(parse_decimal(stripped, 1, 6), rest) as u32,
-        None => 0,
-    };
-
-    let offset = match rest.chars().next() {
-        None => 0,
-        Some('Z') => {
-            rest = &rest[1..];
-            0
+    let (got, rest) = take_while(rest, |c| c != ' ', 38);
+    match rest {
+        Some(rest) => {
+            let ts = parse_timestamp_rfc3339(got.as_bytes())?;
+            Ok((Some(ts), rest))
         }
-        Some(c) => {
-            let (sign, irest) = match c {
-                // Note: signs are backwards as per RFC3339
-                '-' => (-1, &rest[1..]),
-                '+' => (1, &rest[1..]),
-                _ => {
-                    return Err(Error::InvalidUTCOffset);
-                }
-            };
-            let hours = i32::from_str(&irest[0..2])?;
-            let minutes = i32::from_str(&irest[3..5])?;
-            rest = &irest[5..];
-            sign * (hours * 60 * 60 + minutes * 60)
-        }
-    };
-
-    let offset = FixedOffset::east_opt(offset).ok_or(Error::InvalidOffset)?;
-    let datetime = NaiveDate::from_ymd_opt(year, month, day)
-        .unwrap()
-        .and_hms_nano_opt(hour, minute, second, nano)
-        .unwrap();
-
-    if let LocalResult::Single(ts) = offset.from_local_datetime(&datetime) {
-        Ok((Some(ts), rest))
-    } else {
-        Err(Error::InvalidOffset)
+        None => Err(Error::UnexpectedEndOfInput),
     }
 }
 
@@ -555,7 +504,7 @@ mod tests {
         assert_eq!(msg.msg, String::from(""));
         assert_eq!(
             msg.timestamp,
-            Some(DateTime::parse_from_rfc3339("2018-05-14T08:23:01.520Z").unwrap())
+            Some(DateTime::parse_from_rfc3339("2018-05-14T08:23:01.000520Z").unwrap())
         );
         assert_eq!(msg.structured_data.len(), 1);
 
@@ -605,8 +554,8 @@ mod tests {
 
     #[test]
     fn timestamp() {
-        let (ts, rest) = parse_timestamp("2015-02-18T23:16:09Z").unwrap();
-        assert_eq!(rest, "");
+        let (ts, rest) = parse_timestamp("2015-02-18T23:16:09Z ").unwrap();
+        assert_eq!(rest, " ");
         assert_eq!(
             FixedOffset::east_opt(0)
                 .unwrap()
@@ -616,8 +565,8 @@ mod tests {
         );
 
         let edt = FixedOffset::east_opt(5 * 60 * 60).unwrap();
-        let (ts, rest) = parse_timestamp("2015-02-18T23:59:59.234567+05:00").unwrap();
-        assert_eq!(rest, "");
+        let (ts, rest) = parse_timestamp("2015-02-18T23:59:59.234567+05:00 ").unwrap();
+        assert_eq!(rest, " ");
         assert_eq!(
             edt.from_local_datetime(
                 &NaiveDate::from_ymd_opt(2015, 2, 18)

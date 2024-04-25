@@ -13,6 +13,51 @@ pub enum Error {
     ExpectedChar(char),
     IntConversion(ParseIntError),
     InvalidOffset,
+
+    /// input is too short
+    TimestampTooShort,
+    /// invalid datetime separator, expected `T`, `t`, `_` or space
+    InvalidCharDateTimeSep,
+    /// timezone offset must be less than 24 hours
+    OutOfRangeTimezone,
+    /// month value is outside expected range of 1-12
+    OutOfRangeMonth,
+    /// day value is outside expected range
+    OutOfRangeDay,
+    /// invalid timezone sign
+    InvalidCharTzSign,
+    /// invalid timezone minute
+    InvalidCharTzMinute,
+    /// timezone minute value is outside expected range of 0-59
+    OutOfRangeTzMinute,
+    /// unexpected extra characters at the end of the input
+    ExtraCharacters,
+    /// hour value is outside expected range of 0-23
+    OutOfRangeHour,
+    /// minute value is outside expected range of 0-59
+    OutOfRangeMinute,
+    /// second fraction value is more than 6 digits long
+    SecondFractionTooLong,
+    /// second fraction digits missing after `.`
+    SecondFractionMissing,
+    /// invalid character in year
+    InvalidCharYear,
+    /// invalid character in month
+    InvalidCharMonth,
+    /// invalid character in day
+    InvalidCharDay,
+    /// invalid character in hour
+    InvalidCharHour,
+    /// invalid time separator, expected `:`
+    InvalidCharTimeSep,
+    /// invalid character in minute
+    InvalidCharMinute,
+    /// invalid character in second
+    InvalidCharSecond,
+    /// second value is outside expected range of 0-59
+    OutOfRangeSecond,
+    /// invalid timezone hour
+    InvalidCharTzHour,
 }
 
 impl std::error::Error for Error {}
@@ -25,12 +70,11 @@ impl Display for Error {
             Error::UnexpectedEndOfInput => f.write_str("unexpected eof"),
             Error::TooFewDigits => f.write_str("too few digits in numeric field"),
             Error::TooManyDigits => f.write_str("too many digits in numeric field"),
-            Error::InvalidUTCOffset => f.write_str("invalid UTC offset"),
             Error::BaseUnicodeError(err) => write!(f, "unicode error: {err}"),
             Error::UnicodeError(err) => write!(f, "unicode error: {err}"),
             Error::ExpectedChar(c) => write!(f, "unexpected input at character {c}"),
             Error::IntConversion(err) => write!(f, "integer conversion error: {err}"),
-            Error::InvalidOffset => f.write_str("date had invalid UTC offset"),
+            _ => todo!(),
         }
     }
 }

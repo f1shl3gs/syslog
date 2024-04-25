@@ -3,13 +3,28 @@ name = "syslog"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+bench = false
+
+[profile.bench]
+lto = true
+codegen-units = 1
+opt-level = 3
+
 [[bench]]
 name = "parse"
+harness = false
+
+[[bench]]
+name = "timestamp"
 harness = false
 
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false }
 syslog_loose = { version = "0.21", default-features = false }
+eeep = { git = "https://github.com/imron/eeep.git", rev = "271feb4" }
+speedate = { version = "0.14" }
+pprof = { version = "0.13", features = ["flamegraph"] }
 
 [dependencies]
 chrono = { version = "0.4", default-features = false }

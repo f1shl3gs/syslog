@@ -62,6 +62,23 @@ fn parse_sd_id(input: &str) -> Result<(&str, &str), Error> {
     }
 }
 
+#[inline]
+fn parse_param_key(input: &str) -> Result<(&str, &str), Error> {
+    let buf = input.as_bytes();
+    for pos in 0..buf.len() {
+        let ch = buf[pos];
+        if ch == b'=' || ch == b']' {
+            return Ok((&input[..pos], &input[pos..]));
+        }
+
+        if pos >= 64 {
+            return Ok((&input[..pos], &input[pos..]));
+        }
+    }
+
+    Err(Error::UnexpectedEndOfInput)
+}
+
 /** Parse a `param_value`... a.k.a. a quoted string */
 #[inline]
 fn parse_param_value(input: &str) -> Result<(&str, &str), Error> {
@@ -94,7 +111,7 @@ fn parse_sd_params(input: &str) -> Result<(Vec<(&str, &str)>, &str), Error> {
     loop {
         if top.starts_with(' ') {
             let mut rest = &top[1..];
-            let name = take_item!(parse_sd_id(rest), rest);
+            let name = take_item!(parse_param_key(rest), rest);
             take_char!(rest, '=');
             let value = take_item!(parse_param_value(rest), rest);
 
@@ -110,6 +127,7 @@ fn parse_structured_element(input: &str) -> Result<(StructuredElement<&str>, &st
     let mut rest = input;
     take_char!(rest, '[');
     let id = take_item!(parse_sd_id(rest), rest);
+
     let params = take_item!(parse_sd_params(rest), rest);
     take_char!(rest, ']');
 
@@ -117,12 +135,11 @@ fn parse_structured_element(input: &str) -> Result<(StructuredElement<&str>, &st
 }
 
 fn parse_structured_data(input: &str) -> Result<(Vec<StructuredElement<&str>>, &str), Error> {
-    let mut elements = vec![];
-
     if let Some(rest) = input.strip_prefix('-') {
-        return Ok((elements, rest));
+        return Ok((Vec::new(), rest));
     }
 
+    let mut elements = Vec::with_capacity(1); // at least one
     let mut rest = input;
     while !rest.is_empty() {
         let se = take_item!(parse_structured_element(rest), rest);
@@ -143,19 +160,26 @@ fn parse_pri_val(pri: i32) -> Result<(Severity, Facility), Error> {
 }
 
 /// Parse an integer
-fn parse_num<T>(input: &str, min_digits: usize, max_digits: usize) -> Result<(T, &str), Error>
-where
-    T: FromStr<Err = std::num::ParseIntError>,
-{
-    let (got, rest) = take_while(input, |c| c.is_ascii_digit(), max_digits);
-    let rest = rest.ok_or(Error::UnexpectedEndOfInput)?;
-    if got.len() < min_digits {
-        Err(Error::TooFewDigits)
-    } else if got.len() > max_digits {
-        Err(Error::TooManyDigits)
-    } else {
-        Ok((T::from_str(got)?, rest))
+fn parse_num(input: &str, max_digits: usize) -> Result<(i32, &str), Error> {
+    let buf = input.as_bytes();
+    let mut value = 0i32;
+    let mut pos = 0;
+
+    loop {
+        if pos >= max_digits {
+            break;
+        }
+
+        let ch = buf[pos];
+        if !ch.is_ascii_digit() {
+            break;
+        }
+
+        pos += 1;
+        value = value * 10 + (ch - b'0') as i32;
     }
+
+    Ok((value, &input[pos..]))
 }
 
 fn parse_timestamp(m: &str) -> Result<(Option<DateTime<FixedOffset>>, &str), Error> {
@@ -179,21 +203,23 @@ fn parse_term(
     min_length: usize,
     max_length: usize,
 ) -> Result<(Option<&str>, &str), Error> {
-    if m.starts_with('-') && (m.len() <= 1 || m.as_bytes()[1] == 0x20) {
+    let buf = m.as_bytes();
+    if buf[0] == b'-' && (buf.len() <= 1 || buf[1] == 0x20) {
         return Ok((None, &m[1..]));
     }
 
-    for (idx, ch) in m.char_indices() {
-        if ch < 33 as char || ch > 126 as char {
-            if idx < min_length {
+    for pos in 0..buf.len() {
+        let ch = buf[pos];
+        if ch < b'!' || ch > b'~' {
+            if pos < min_length {
                 return Err(Error::TooFewDigits);
             }
 
-            return Ok((Some(&m[..idx]), &m[idx..]));
+            return Ok((Some(&m[..pos]), &m[pos..]));
         }
 
-        if idx >= max_length {
-            return Ok((Some(&m[..idx]), &m[idx..]));
+        if pos >= max_length {
+            return Ok((Some(&m[..pos]), &m[pos..]));
         }
     }
 
@@ -214,10 +240,10 @@ fn parse_term(
 pub fn parse_message(input: &str) -> Result<Message<&str>, Error> {
     let mut rest = input;
     take_char!(rest, '<');
-    let prival = take_item!(parse_num(rest, 1, 3), rest);
+    let prival = take_item!(parse_num(rest, 3), rest);
     take_char!(rest, '>');
     let (severity, facility) = parse_pri_val(prival)?;
-    let version = take_item!(parse_num(rest, 1, 2), rest);
+    let version = take_item!(parse_num(rest, 2), rest);
     take_char!(rest, ' ');
     let timestamp = take_item!(parse_timestamp(rest), rest);
     take_char!(rest, ' ');

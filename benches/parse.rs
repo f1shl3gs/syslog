@@ -29,9 +29,11 @@ fn bench_parse(c: &mut Criterion) {
             });
         });
 
-        group.bench_with_input(BenchmarkId::new("syslog", name), input, |b, input| {
+        group.bench_with_input(BenchmarkId::new("rfc5424", name), input, |b, input| {
+            let input = input.as_bytes();
+
             b.iter(|| {
-                syslog::parse_message(input).unwrap();
+                syslog::rfc5424::parse_message(input).unwrap();
             });
         });
     }

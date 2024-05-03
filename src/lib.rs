@@ -19,7 +19,7 @@
 //! let mut buf = [0u8; 2048];
 //! loop {
 //!     let (data_read, _) = s.recv_from(&mut buf).unwrap();
-//!     let msg = syslog::parse_message(str::from_utf8(&buf[0..data_read]).unwrap()).unwrap();
+//!     let msg = syslog::rfc5424::parse_message(&buf[..data_read]).unwrap();
 //!     println!("{:?} {:?} {:?} {:?}", msg.facility, msg.severity, msg.hostname, msg.msg);
 //! }
 //! ```
@@ -34,18 +34,14 @@
 mod error;
 mod facility;
 mod message;
-mod parser;
 mod procid;
+pub mod rfc5424;
 mod severity;
 mod structured_data;
-mod timestamp;
 
 pub use error::Error;
 pub use facility::Facility;
-pub use message::Message;
-pub use parser::parse_message;
+pub use message::{Message, Protocol};
 pub use procid::ProcId;
 pub use severity::Severity;
 pub use structured_data::StructuredElement;
-
-pub use timestamp::parse_timestamp_rfc3339 as parse_timestamp;

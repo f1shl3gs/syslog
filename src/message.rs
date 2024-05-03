@@ -7,12 +7,18 @@ use crate::procid::ProcId;
 use crate::severity;
 use crate::structured_data::StructuredElement;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Protocol {
+    RFC3164,
+    RFC5424(u32),
+}
+
 /// A RFC5424-protocol syslog message
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Message<S: AsRef<str> + Ord + PartialEq + Clone> {
     pub severity: severity::Severity,
     pub facility: facility::Facility,
-    pub version: i32,
+    pub protocol: Protocol,
     pub timestamp: Option<DateTime<FixedOffset>>,
     pub hostname: Option<S>,
     pub appname: Option<S>,

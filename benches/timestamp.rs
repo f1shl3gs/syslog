@@ -5,9 +5,12 @@ fn parse_timestamp(c: &mut Criterion) {
     let input = r#"2023-04-07T12:52:00.654321Z"#;
     let mut group = c.benchmark_group("parse");
 
-    group.bench_function("own", |b| {
+    group.bench_function("rfc5424", |b| {
+        let input = input.as_bytes();
+
         b.iter(|| {
-            let _ = syslog::parse_timestamp(input.as_bytes());
+            let ref mut offset = 0;
+            let _ = syslog::rfc5424::parse_timestamp(input, offset);
         })
     });
 

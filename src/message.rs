@@ -24,6 +24,7 @@ pub struct Message<S: AsRef<str> + Ord + PartialEq + Clone> {
     pub appname: Option<S>,
     pub procid: Option<ProcId<S>>,
     pub msgid: Option<S>,
+    // NOTE: param value is not escaped
     pub structured_data: Vec<StructuredElement<S>>,
     pub msg: S,
 }

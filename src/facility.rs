@@ -61,7 +61,7 @@ impl TryFrom<i32> for Facility {
             21 => Facility::LOCAL5,
             22 => Facility::LOCAL6,
             23 => Facility::LOCAL7,
-            _ => return Err(Error::BadFacilityInPri),
+            _ => return Err(Error::BadFacility),
         };
 
         Ok(facility)

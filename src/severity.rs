@@ -31,7 +31,7 @@ impl TryFrom<i32> for Severity {
             5 => Severity::NOTICE,
             6 => Severity::INFO,
             7 => Severity::DEBUG,
-            _ => return Err(Error::BadSeverityInPri),
+            _ => return Err(Error::BadSeverity),
         };
 
         Ok(severity)

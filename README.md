@@ -11,13 +11,13 @@ Only RFC5424 is supported, if you want parse [RFC3164](https://datatracker.ietf.
 This implementation is very simple, so it is more efficient.
 
 ```text
-test parse/syslog_loose/with_structured_data ... bench:         412 ns/iter (+/- 12)
-test parse/rfc5424/with_structured_data ... bench:         106 ns/iter (+/- 4)
-test parse/syslog_loose/with_structured_data_long_msg ... bench:         414 ns/iter (+/- 10)
-test parse/rfc5424/with_structured_data_long_msg ... bench:         106 ns/iter (+/- 2)
-test parse/syslog_loose/without_structured_data ... bench:         278 ns/iter (+/- 2)
-test parse/rfc5424/without_structured_data ... bench:          61 ns/iter (+/- 1)
-test parse/syslog_loose/without_structured_data_long_msg ... bench:         277 ns/iter (+/- 2)
+test parse/syslog_loose/with_structured_data ... bench:         414 ns/iter (+/- 4)
+test parse/rfc5424/with_structured_data ... bench:          94 ns/iter (+/- 0)
+test parse/syslog_loose/with_structured_data_long_msg ... bench:         407 ns/iter (+/- 4)
+test parse/rfc5424/with_structured_data_long_msg ... bench:          94 ns/iter (+/- 0)
+test parse/syslog_loose/without_structured_data ... bench:         262 ns/iter (+/- 3)
+test parse/rfc5424/without_structured_data ... bench:          60 ns/iter (+/- 2)
+test parse/syslog_loose/without_structured_data_long_msg ... bench:         260 ns/iter (+/- 3)
 test parse/rfc5424/without_structured_data_long_msg ... bench:          60 ns/iter (+/- 0)
 
 ```

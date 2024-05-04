@@ -9,20 +9,13 @@ fn parse_timestamp(c: &mut Criterion) {
         let input = input.as_bytes();
 
         b.iter(|| {
-            let ref mut offset = 0;
-            let _ = syslog::rfc5424::parse_timestamp(input, offset);
+            let _ = syslog::rfc5424::parse_timestamp(input, &mut 0);
         })
     });
 
     group.bench_function("chrono", |b| {
         b.iter(|| {
             let _ = chrono::DateTime::parse_from_rfc3339(input);
-        })
-    });
-
-    group.bench_function("eeep", |b| {
-        b.iter(|| {
-            let _ = eeep::parse_from_timestamp_datetime(input);
         })
     });
 

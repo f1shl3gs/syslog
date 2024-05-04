@@ -159,14 +159,15 @@ pub fn parse_timestamp(buf: &[u8], offset: &mut usize) -> Result<DateTime<FixedO
     )
 }
 
+// SIMD is great but it is might not suitable here. Cause, in our case, the string is short.
 #[inline]
 fn take_until_whitespace<'a>(buf: &'a [u8], offset: &mut usize) -> Result<&'a str, Error> {
-    let start = *offset;
-    for pos in start..buf.len() {
+    for pos in *offset..buf.len() {
         let ch = buf[pos];
         if ch.is_ascii_whitespace() {
+            let value = unsafe { std::str::from_utf8_unchecked(&buf[*offset..pos]) };
             *offset = pos;
-            return Ok(unsafe { std::str::from_utf8_unchecked(&buf[start..pos]) });
+            return Ok(value);
         }
     }
 
@@ -177,7 +178,7 @@ fn parse_sd_params<'a>(
     buf: &'a [u8],
     offset: &mut usize,
 ) -> Result<Vec<(&'a str, &'a str)>, Error> {
-    let mut params = Vec::new();
+    let mut params = Vec::with_capacity(4);
 
     loop {
         let key = parse_param_key(buf, offset)?;
@@ -207,9 +208,11 @@ fn parse_sd_params<'a>(
     Ok(params)
 }
 
+#[inline]
 fn parse_param_key<'a>(buf: &'a [u8], offset: &mut usize) -> Result<&'a str, Error> {
     for pos in *offset..buf.len() {
         let ch = buf[pos];
+
         if ch == b'=' || ch == b']' {
             let key = unsafe { std::str::from_utf8_unchecked(&buf[*offset..pos]) };
             *offset = pos;
@@ -220,26 +223,15 @@ fn parse_param_key<'a>(buf: &'a [u8], offset: &mut usize) -> Result<&'a str, Err
     Err(Error::UnexpectedEndOfInput)
 }
 
+#[inline]
 fn parse_param_value<'a>(buf: &'a [u8], offset: &mut usize) -> Result<&'a str, Error> {
     if buf[*offset] != b'"' {
         return Err(Error::ExpectedChar('"'));
     }
     *offset += 1;
 
-    let mut escaped = false;
     for pos in *offset..buf.len() {
-        let ch = buf[pos];
-        if escaped {
-            escaped = false;
-            continue;
-        }
-
-        if ch == b'\\' {
-            escaped = true;
-            continue;
-        }
-
-        if ch == b'"' {
+        if buf[pos] == b'"' {
             let value = unsafe { std::str::from_utf8_unchecked(&buf[*offset..pos]) };
             *offset = pos + 1; // 1 for the double quota
             return Ok(value);
@@ -287,18 +279,16 @@ fn parse_structured_data<'a>(
     buf: &'a [u8],
     offset: &mut usize,
 ) -> Result<Vec<StructuredElement<&'a str>>, Error> {
-    let mut elements = Vec::with_capacity(1);
+    // 4 is RawVec::MIN_NON_ZERO_CAP
+    let mut elements = Vec::with_capacity(4);
 
     loop {
         let element = parse_structured_element(buf, offset)?;
         elements.push(element);
 
-        if *offset == buf.len() {
-            // empty message, STRUCTURED-DATA Only
-            break;
-        }
-
-        if buf[*offset] == b' ' {
+        // 1. empty message(aka STRUCTURED-DATA Only),
+        // 2. structured data is done
+        if *offset == buf.len() || buf[*offset] == b' ' {
             break;
         }
     }
@@ -313,35 +303,29 @@ fn parse_structured_data<'a>(
 /// as good as we expected.
 pub fn parse_message(buf: &[u8]) -> Result<Message<&str>, Error> {
     let len = buf.len();
-    let mut offset = 0;
 
     // Parse priority
     //
     // https://datatracker.ietf.org/doc/html/rfc5424#section-6.2.1
-    if offset >= len || buf[0] != b'<' {
+    if len < 4 || buf[0] != b'<' {
         return Err(Error::ExpectedChar('<'));
     }
-    offset += 1;
 
+    let mut offset = 1;
     let mut prival = 0i32;
-    for i in 1..4 {
-        let ch = buf[i];
+    for pos in 1..len {
+        let ch = buf[pos];
         if !ch.is_ascii_digit() {
             if ch == b'>' {
+                offset = pos + 1;
                 break;
             }
 
             return Err(Error::ExpectedChar(ch as char));
         }
 
-        offset += 1;
         prival = (prival * 10) + (ch - b'0') as i32;
     }
-
-    if buf[offset] != b'>' {
-        return Err(Error::ExpectedChar('>'));
-    }
-    offset += 1;
 
     let severity = Severity::try_from(prival & 0x7)?;
     let facility = Facility::try_from(prival >> 3)?;
@@ -360,7 +344,7 @@ pub fn parse_message(buf: &[u8]) -> Result<Message<&str>, Error> {
     };
 
     if buf[offset] != b' ' {
-        return Err(Error::ExpectedChar(buf[offset] as char));
+        return Err(Error::ExpectSeparator);
     }
     offset += 1;
 
@@ -373,7 +357,7 @@ pub fn parse_message(buf: &[u8]) -> Result<Message<&str>, Error> {
     };
 
     if buf[offset] != b' ' {
-        return Err(Error::ExpectedChar(buf[offset] as char));
+        return Err(Error::ExpectSeparator);
     }
     offset += 1;
 
@@ -385,7 +369,7 @@ pub fn parse_message(buf: &[u8]) -> Result<Message<&str>, Error> {
     };
 
     if buf[offset] != b' ' {
-        return Err(Error::ExpectedChar(buf[offset] as char));
+        return Err(Error::ExpectSeparator);
     }
     offset += 1;
 
@@ -397,7 +381,7 @@ pub fn parse_message(buf: &[u8]) -> Result<Message<&str>, Error> {
     };
 
     if buf[offset] != b' ' {
-        return Err(Error::ExpectedChar(buf[offset] as char));
+        return Err(Error::ExpectSeparator);
     }
     offset += 1;
 
@@ -413,7 +397,7 @@ pub fn parse_message(buf: &[u8]) -> Result<Message<&str>, Error> {
     };
 
     if buf[offset] != b' ' {
-        return Err(Error::ExpectedChar(buf[offset] as char));
+        return Err(Error::ExpectSeparator);
     }
     offset += 1;
 
@@ -425,7 +409,7 @@ pub fn parse_message(buf: &[u8]) -> Result<Message<&str>, Error> {
     };
 
     if buf[offset] != b' ' {
-        return Err(Error::ExpectedChar(buf[offset] as char));
+        return Err(Error::ExpectSeparator);
     }
     offset += 1;
 

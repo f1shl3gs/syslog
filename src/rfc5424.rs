@@ -265,19 +265,16 @@ fn parse_structured_element<'a>(
     for pos in *offset..buf.len() {
         let ch = buf[pos];
         if ch == b' ' {
-            id = unsafe { std::str::from_utf8_unchecked(&buf[*offset..pos])};
+            id = unsafe { std::str::from_utf8_unchecked(&buf[*offset..pos]) };
             *offset = pos + 1;
-            break
+            break;
         }
 
         if ch == b']' {
             // just id no key-value pairs
-            id = unsafe { std::str::from_utf8_unchecked(&buf[*offset..pos])};
+            id = unsafe { std::str::from_utf8_unchecked(&buf[*offset..pos]) };
             *offset = pos + 1;
-            return Ok(StructuredElement {
-                id,
-                params: vec![],
-            })
+            return Ok(StructuredElement { id, params: vec![] });
         }
     }
 

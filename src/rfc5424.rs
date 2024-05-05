@@ -163,9 +163,7 @@ pub fn parse_timestamp(buf: &[u8], offset: &mut usize) -> Result<DateTime<FixedO
 #[inline]
 fn take_until_whitespace<'a>(buf: &'a [u8], offset: &mut usize) -> Result<&'a str, Error> {
     for pos in *offset..buf.len() {
-        // `buf[pos] == b' '` should be the best option, but the benchmark
-        // tells us it isn't.
-        if buf[pos].is_ascii_whitespace() {
+        if buf[pos] == b' ' {
             let value = unsafe { std::str::from_utf8_unchecked(&buf[*offset..pos]) };
             *offset = pos;
             return Ok(value);

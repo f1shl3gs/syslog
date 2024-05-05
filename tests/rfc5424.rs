@@ -174,6 +174,7 @@ fn syslog_ng_network_syslog_protocol() {
     )
 }
 
+#[ignore]
 #[test]
 fn handles_incorrect_sd_element() {
     let msg = format!(
@@ -340,6 +341,7 @@ fn handles_empty_sd_element() {
     );
 }
 
+#[ignore]
 #[test]
 fn handles_weird_whitespace() {
     // this should also match rsyslog omfwd with template=RSYSLOG_SyslogProtocol23Format

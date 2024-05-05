@@ -163,8 +163,9 @@ pub fn parse_timestamp(buf: &[u8], offset: &mut usize) -> Result<DateTime<FixedO
 #[inline]
 fn take_until_whitespace<'a>(buf: &'a [u8], offset: &mut usize) -> Result<&'a str, Error> {
     for pos in *offset..buf.len() {
-        let ch = buf[pos];
-        if ch.is_ascii_whitespace() {
+        // `buf[pos] == b' '` should be the best option, but the benchmark
+        // tells us it isn't.
+        if buf[pos].is_ascii_whitespace() {
             let value = unsafe { std::str::from_utf8_unchecked(&buf[*offset..pos]) };
             *offset = pos;
             return Ok(value);
@@ -201,7 +202,7 @@ fn parse_sd_params<'a>(
                 *offset += 1;
                 continue;
             }
-            _ch => return Err(Error::UnexpectedEndOfInput),
+            _ch => return Err(Error::InvalidStructuredData),
         }
     }
 
@@ -262,12 +263,25 @@ fn parse_structured_element<'a>(
     }
 
     // parse id
-    let id = take_until_whitespace(buf, offset)?;
+    let mut id = "";
+    for pos in *offset..buf.len() {
+        let ch = buf[pos];
+        if ch == b' ' {
+            id = unsafe { std::str::from_utf8_unchecked(&buf[*offset..pos])};
+            *offset = pos + 1;
+            break
+        }
 
-    if buf[*offset] != b' ' {
-        return Err(Error::ExpectedChar(' '));
+        if ch == b']' {
+            // just id no key-value pairs
+            id = unsafe { std::str::from_utf8_unchecked(&buf[*offset..pos])};
+            *offset = pos + 1;
+            return Ok(StructuredElement {
+                id,
+                params: vec![],
+            })
+        }
     }
-    *offset += 1;
 
     // parse params
     let params = parse_sd_params(buf, offset)?;

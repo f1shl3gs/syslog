@@ -7,6 +7,7 @@ pub enum Error {
     UnexpectedEndOfInput,
     ExpectedChar(char),
     ExpectSeparator,
+    InvalidStructuredData,
 
     InvalidTimestamp,
     OutOfRangeTimezone,
@@ -22,6 +23,7 @@ impl Display for Error {
             Error::UnexpectedEndOfInput => f.write_str("unexpected eof"),
             Error::ExpectedChar(c) => write!(f, "unexpected input at character {c}"),
             Error::ExpectSeparator => f.write_str("expect a separator"),
+            Error::InvalidStructuredData => f.write_str("invalid structured data"),
             // Timestamp
             Error::InvalidTimestamp => f.write_str("invalid timestamp"),
             Error::OutOfRangeTimezone => f.write_str("timezone offset is out of range"),
